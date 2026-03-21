@@ -1211,27 +1211,28 @@
       const raw = inp ? inp.value.trim() : '';
       const name = (raw.replace(/[^a-zA-Z0-9 _\-!]/g, '').substring(0, 12)) || 'ANONYMOUS';
 
-      // Disable button to prevent double-submit
       const btn = document.getElementById('dynSubmitBtn');
       if (btn) { btn.disabled = true; btn.textContent = 'SAVING...'; }
 
-      await saveScore(name);
-      showLeaderboard(name);
+      const saved = await saveScore(name);
+      if (btn && sbClient && !saved) btn.textContent = 'SERVER OFFLINE — SHOWING LOCAL';
+      showLeaderboard(name, !saved && !!sbClient);
     }
 
     // ════════════════════════════════════════════════════════════════
     // SUPABASE SCORE FUNCTIONS
     // ════════════════════════════════════════════════════════════════
     async function saveScore(name) {
-      if (!sbClient) return;
+      if (!sbClient) return false;
       try {
         const { error } = await sbClient.from('scores').insert({
           name: name,
           score: G.score,
           level: G.level,
         });
-        if (error) console.warn('Save score error:', error.message);
-      } catch (e) { console.warn('Save score failed:', e); }
+        if (error) { console.warn('Save score error:', error.message); return false; }
+        return true;
+      } catch (e) { console.warn('Save score failed:', e); return false; }
     }
 
     async function fetchTopScores(limit = 10) {
@@ -1250,7 +1251,7 @@
     // ════════════════════════════════════════════════════════════════
     // LEADERBOARD DISPLAY
     // ════════════════════════════════════════════════════════════════
-    async function showLeaderboard(highlightName) {
+    async function showLeaderboard(highlightName, saveFailed) {
       const dyn = document.getElementById('dynOverlay');
       dyn.innerHTML = `
     <h2 style="font-size:clamp(1.4em,3.5vw,2.2em);color:#ff0;
@@ -1279,11 +1280,27 @@
         return;
       }
 
+      if (saveFailed) {
+        status.innerHTML = `<span style="color:#f84">&#9888; Could not reach server &mdash; score saved locally only.<br>
+          Your Supabase project may be paused &mdash;
+          <a href="https://supabase.com/dashboard" target="_blank"
+            style="color:#0ff;text-decoration:underline">resume it at supabase.com</a></span>`;
+        wrap.innerHTML = `<p class="sub" style="margin-top:8px">YOUR SCORE: <span style="color:#ff0">${G.score.toLocaleString()}</span>
+          &nbsp;&nbsp; LEVEL: <span style="color:#0ff">${G.level}</span></p>
+          <p class="sub">LOCAL HI: <span style="color:#0ff">${G.hiScore.toLocaleString()}</span></p>`;
+        return;
+      }
+
       const data = await fetchTopScores();
       if (!status || !wrap) return;
 
       if (!data) {
-        status.textContent = 'Could not load scores. Check your connection.';
+        status.innerHTML = `<span style="color:#f84">&#9888; Could not load leaderboard &mdash; your Supabase project may be paused.<br>
+          <a href="https://supabase.com/dashboard" target="_blank"
+            style="color:#0ff;text-decoration:underline">Resume it at supabase.com</a></span>`;
+        wrap.innerHTML = `<p class="sub" style="margin-top:8px">YOUR SCORE: <span style="color:#ff0">${G.score.toLocaleString()}</span>
+          &nbsp;&nbsp; LEVEL: <span style="color:#0ff">${G.level}</span></p>
+          <p class="sub">LOCAL HI: <span style="color:#0ff">${G.hiScore.toLocaleString()}</span></p>`;
         return;
       }
 
